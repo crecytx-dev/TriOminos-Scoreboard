@@ -1,5 +1,5 @@
 {
-  "name": "My TriOminos Scorecard",
+  "name": "TriOminos Scorecard",
   "short_name": "TriOminos Scorecard",
   "start_url": "index.html",
   "scope": "./",
@@ -19,3 +19,4 @@
     }
   ]
 }
+
