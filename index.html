@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('service-worker.js');
+}
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
+    <title>TriOminos Scoreboard</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+        
+        html, body { 
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            font-family: sans-serif; 
+            background: #fdfdfd; 
+            margin: 0; 
+            padding: 0;
+            color: #004d40;
+        }
+
+        .container { 
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh;
+            height: 100dvh;
+            width: 100%;
+            max-width: 500px; 
+            margin: 0 auto;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .fixed-header {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background: #fdfdfd;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .scroll-content {
+            position: absolute;
+            top: 125px; 
+            left: 0;
+            right: 0;
+            bottom: 0;
+            overflow-y: auto;
+            overflow-x: hidden;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        table { width: 100%; border-collapse: collapse; table-layout: fixed; background: white; }
+        th, td { border: 1px solid #80cbc4; padding: 2px; text-align: center; }
+        
+        .player-row th { 
+            background: #e0f2f1; 
+            color: #004d40; 
+            font-size: 0.75em; 
+            padding: 4px 0; 
+            height: 25px; 
+        }
+
+        .label-col { width: 90px; background: #e0f2f1; font-weight: bold; font-size: 0.7em; text-transform: uppercase; color: #004d40; vertical-align: middle; }
+        
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+        
+        /* ADJUSTED: Input font size to 1.2em */
+        input { 
+            width: 95%; border: 1px solid #ccc; border-radius: 4px; padding: 12px 0; 
+            text-align: center; font-size: 1.2em; color: #004d40; outline: none; box-sizing: border-box; 
+        }
+
+        /* NEW: Placeholder font size to 0.8em */
+        input::placeholder {
+            font-size: 0.8em;
+            font-weight: normal;
+            opacity: 0.7;
+        }
+        
+        input:focus { border-color: #00796b; background: #f0fdfa; border-width: 2px; }
+        input:disabled { background: #bdbdbd; border-color: #9e9e9e; color: #616161; cursor: not-allowed; opacity: 1; }
+
+        /* ADJUSTED: Name input font size to 1.2em */
+        .name-in { border: none; background: transparent; font-weight: bold; font-size: 1.2em; color: #004d40; padding: 2px 0; }
+        
+        .total-row { background: #b2dfdb; color: #004d40; font-size: 1.1em; font-weight: bold; }
+        
+        .curr-total { 
+            background: #e0f2f1; 
+            color: #00796b; 
+            font-size: 1.1em; 
+            font-weight: bold; 
+            padding: 10px 0; 
+        }
+        #roundLabel { font-size: 0.85em; vertical-align: middle; }
+
+        .btn-add { 
+            width: 100%; 
+            padding: 8px; 
+            background: #00796b; 
+            color: white; 
+            border: none; 
+            font-weight: bold; 
+            font-size: 0.9em; 
+            cursor: pointer;
+            height: 40px;
+            display: block;
+        }
+        .btn-editing { background: #d32f2f !important; }
+        
+        .history-section { margin-top: 10px; border-top: 2px solid #00796b; background: #fff; }
+        .hist-row:hover { background-color: #f0fdfa; cursor: pointer; }
+        .editing-row { background-color: #fff9c4 !important; }
+        
+        .winner { background: #ffeb3b !important; }
+
+        .spinner-container { display: flex; align-items: center; justify-content: center; gap: 2px; padding: 4px 0; }
+        .spin-btn { background: #00796b; color: white; border: none; border-radius: 4px; width: 28px; height: 28px; font-weight: bold; cursor: pointer; font-size: 16px; }
+        .spin-btn:disabled { background: #ccc; cursor: not-allowed; }
+        .pass-val { width: 30px; text-align: center; font-weight: bold; color: #d32f2f; font-size: 0.85em; }
+        
+        .scroll-padding {
+            height: 150px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="fixed-header">
+        <button id="mainBtn" class="btn-add" onclick="saveRound()">ADD ROUND & CLEAR</button>
+        <table>
+            <tr class="player-row">
+                <th class="label-col">PLAYER</th>
+                <th><input type="text" id="n1" class="name-in" data-row="0" data-col="1" placeholder="NAME 1" oninput="updateBoxStates(); saveToStorage();"></th>
+                <th><input type="text" id="n2" class="name-in" data-row="0" data-col="2" placeholder="NAME 2" oninput="updateBoxStates(); saveToStorage();"></th>
+                <th><input type="text" id="n3" class="name-in" data-row="0" data-col="3" placeholder="NAME 3" oninput="updateBoxStates(); saveToStorage();"></th>
+                <th><input type="text" id="n4" class="name-in" data-row="0" data-col="4" placeholder="NAME 4" oninput="updateBoxStates(); saveToStorage();"></th>
+            </tr>
+            <tr class="total-row">
+                <td class="label-col">SCORE</td>
+                <td id="gt1">0</td><td id="gt2">0</td><td id="gt3">0</td><td id="gt4">0</td>
+            </tr>
+            <tr class="curr-total">
+                <td class="label-col" id="roundLabel">ROUND 1</td>
+                <td id="rt1"></td><td id="rt2"></td><td id="rt3"></td><td id="rt4"></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="scroll-content">
+        <table>
+            <tr><td class="label-col">Tile Value</td>
+                <td><input type="number" id="v1" class="grid-input" data-row="1" data-col="1" onchange="validateTileValue(this)" disabled></td>
+                <td><input type="number" id="v2" class="grid-input" data-row="1" data-col="2" onchange="validateTileValue(this)" disabled></td>
+                <td><input type="number" id="v3" class="grid-input" data-row="1" data-col="3" onchange="validateTileValue(this)" disabled></td>
+                <td><input type="number" id="v4" class="grid-input" data-row="1" data-col="4" onchange="validateTileValue(this)" disabled></td>
+            </tr>
+            <tr><td class="label-col">Draw (-5)</td>
+                <td><input type="number" id="d1" class="grid-input" data-row="2" data-col="1" disabled></td><td><input type="number" id="d2" class="grid-input" data-row="2" data-col="2" disabled></td>
+                <td><input type="number" id="d3" class="grid-input" data-row="2" data-col="1" disabled></td><td><input type="number" id="d4" class="grid-input" data-row="2" data-col="4" disabled></td>
+            </tr>
+            <tr><td class="label-col">Start (10)</td>
+                <td><input type="number" id="s1" class="grid-input" data-row="3" data-col="1" placeholder="Enter 1" disabled></td><td><input type="number" id="s2" class="grid-input" data-row="3" data-col="2" placeholder="Enter 1" disabled></td>
+                <td><input type="number" id="s3" class="grid-input" data-row="3" data-col="3" placeholder="Enter 1" disabled></td><td><input type="number" id="s4" class="grid-input" data-row="3" data-col="4" placeholder="Enter 1" disabled></td>
+            </tr>
+            <tr><td class="label-col">Out (25)</td>
+                <td><input type="number" id="o1" class="grid-input" data-row="4" data-col="1" placeholder="Enter 1" disabled></td><td><input type="number" id="o2" class="grid-input" data-row="4" data-col="2" placeholder="Enter 1" disabled></td>
+                <td><input type="number" id="o3" class="grid-input" data-row="4" data-col="3" placeholder="Enter 1" disabled></td><td><input type="number" id="o4" class="grid-input" data-row="4" data-col="4" placeholder="Enter 1" disabled></td>
+            </tr>
+            <tr><td class="label-col">Bridge (40)</td>
+                <td><input type="number" id="b1" class="grid-input" data-row="5" data-col="1" placeholder="Enter 1" disabled></td><td><input type="number" id="b2" class="grid-input" data-row="5" data-col="2" placeholder="Enter 1" disabled></td>
+                <td><input type="number" id="b3" class="grid-input" data-row="5" data-col="3" placeholder="Enter 1" disabled></td><td><input type="number" id="b4" class="grid-input" data-row="5" data-col="4" placeholder="Enter 1" disabled></td>
+            </tr>
+            <tr><td class="label-col">Pie (50)</td>
+                <td><input type="number" id="p1" class="grid-input" data-row="6" data-col="1" placeholder="Enter 1" disabled></td><td><input type="number" id="p2" class="grid-input" data-row="6" data-col="2" placeholder="Enter 1" disabled></td>
+                <td><input type="number" id="p3" class="grid-input" data-row="6" data-col="3" placeholder="Enter 1" disabled></td><td><input type="number" id="p4" class="grid-input" data-row="6" data-col="4" placeholder="Enter 1" disabled></td>
+            </tr>
+            <tr><td class="label-col">Hand Value</td>
+                <td><input type="number" id="h1" class="grid-input" data-row="7" data-col="1" disabled></td><td><input type="number" id="h2" class="grid-input" data-row="7" data-col="2" disabled></td>
+                <td><input type="number" id="h3" class="grid-input" data-row="7" data-col="3" disabled></td><td><input type="number" id="h4" class="grid-input" data-row="7" data-col="4" disabled></td>
+            </tr>
+            <tr><td class="label-col">Pass (-10)</td>
+                <td><div class="spinner-container"><button class="spin-btn" id="l1" onclick="changePass(1, -10)" disabled>−</button><span id="pa1" class="pass-val"></span><button class="spin-btn" id="m1" onclick="changePass(1, 10)" disabled>+</button></div></td>
+                <td><div class="spinner-container"><button class="spin-btn" id="l2" onclick="changePass(2, -10)" disabled>−</button><span id="pa2" class="pass-val"></span><button class="spin-btn" id="m2" onclick="changePass(2, 10)" disabled>+</button></div></td>
+                <td><div class="spinner-container"><button class="spin-btn" id="l3" onclick="changePass(3, -10)" disabled>−</button><span id="pa3" class="pass-val"></span><button class="spin-btn" id="m3" onclick="changePass(3, 10)" disabled>+</button></div></td>
+                <td><div class="spinner-container"><button class="spin-btn" id="l4" onclick="changePass(4, -10)" disabled>−</button><span id="pa4" class="pass-val"></span><button class="spin-btn" id="m4" onclick="changePass(4, 10)" disabled>+</button></div></td>
+            </tr>
+        </table>
+
+        <div class="history-section">
+            <table id="historyTable">
+                <tbody id="histBody"></tbody>
+            </table>
+        </div>
+        <button onclick="resetBoard()" style="width:100%; border:none; background:none; color:grey; font-size:10px; margin-top:20px;">RESET SCORE BOARD</button>
+        <div class="scroll-padding"></div>
+    </div>
+</div>
+
+<script>
+    let gameTotals = [0, 0, 0, 0];
+    let currentRoundInSequence = 1; 
+    let roundHistory = [];
+    let editingIdx = -1;
+
+    window.onload = () => {
+        const saved = localStorage.getItem('triScoreData');
+        if (saved) {
+            const data = JSON.parse(saved);
+            gameTotals = data.gameTotals || [0,0,0,0];
+            currentRoundInSequence = data.currentRoundInSequence || 1;
+            roundHistory = data.roundHistory || [];
+            rebuildHistoryTable();
+            for(let i=1; i<=4; i++) {
+                document.getElementById(`n${i}`).value = data.names ? data.names[i-1] : '';
+                document.getElementById(`gt${i}`).innerText = gameTotals[i-1];
+                updateWinnerClass(i);
+            }
+        }
+        updateBoxStates();
+    };
+
+    /* NEW: Validation for Tile Value boxes */
+    function validateTileValue(input) {
+        const val = parseInt(input.value);
+        if (input.value === "") return;
+        const isValid = (val >= 1 && val <= 15) || val === 30;
+        if (!isValid) {
+            alert("Invalid Entry: Please enter a number between 1 and 15, or enter 30.");
+            input.value = "";
+            updateBoxStates();
+        }
+    }
+
+    document.addEventListener('keydown', function(e) {
+        const active = document.activeElement;
+        if (!active || !active.hasAttribute('data-row')) return;
+        let row = parseInt(active.getAttribute('data-row'));
+        let col = parseInt(active.getAttribute('data-col'));
+        let dirR = 0, dirC = 0;
+        if (e.key === "ArrowUp") dirR = -1;
+        else if (e.key === "ArrowDown" || e.key === "Enter") { e.preventDefault(); dirR = 1; }
+        else if (e.key === "ArrowLeft") dirC = -1;
+        else if (e.key === "ArrowRight") dirC = 1;
+        else return;
+        let nextRow = row + dirR, nextCol = col + dirC;
+        while (nextRow >= 0 && nextRow <= 7 && nextCol >= 1 && nextCol <= 4) {
+            let potential = document.querySelector(`input[data-row="${nextRow}"][data-col="${nextCol}"]`);
+            if (potential && !potential.disabled) { 
+                e.preventDefault(); 
+                potential.focus(); 
+                potential.scrollIntoView({ behavior: "smooth", block: "center" });
+                return; 
+            }
+            nextRow += dirR; nextCol += dirC;
+            if (nextCol > 4) { nextCol = 1; nextRow++; }
+            if (nextCol < 1) { nextCol = 4; nextRow--; }
+        }
+    });
+
+    function updateWinnerClass(i) {
+        if(gameTotals[i-1] >= 400) document.getElementById(`gt${i}`).classList.add('winner');
+        else document.getElementById(`gt${i}`).classList.remove('winner');
+    }
+
+    function changePass(pNum, amt) {
+        let span = document.getElementById(`pa${pNum}`);
+        let current = parseInt(span.innerText) || 0;
+        let newVal = Math.min(0, current + amt);
+        span.innerText = (newVal === 0) ? "" : newVal;
+        calc();
+    }
+
+    function updateBoxStates() {
+        let anyoneStarted = [1,2,3,4].map(i => document.getElementById(`s${i}`).value).includes("1");
+        let anyoneOut = [1,2,3,4].map(i => document.getElementById(`o${i}`).value).includes("1");
+        document.getElementById('roundLabel').innerText = "ROUND " + currentRoundInSequence;
+        for(let i=1; i<=4; i++) {
+            let nameFilled = document.getElementById(`n${i}`).value.trim() !== "";
+            let inputs = document.querySelectorAll(`.grid-input[id$="${i}"]`);
+            document.getElementById(`l${i}`).disabled = !nameFilled;
+            document.getElementById(`m${i}`).disabled = !nameFilled;
+            inputs.forEach(input => {
+                if (!nameFilled) { input.disabled = true; input.value = ""; } 
+                else {
+                    let type = input.id.replace(/[0-9]/g, '');
+                    if (type === 's') input.disabled = (currentRoundInSequence > 1) || (anyoneStarted && input.value !== "1");
+                    else if (type === 'o') input.disabled = (anyoneOut && input.value !== "1");
+                    else if (type === 'h') input.disabled = (anyoneOut && document.getElementById(`o${i}`).value === "1");
+                    else input.disabled = false;
+                }
+            });
+        }
+        calc();
+    }
+
+    document.querySelectorAll('.grid-input').forEach(input => {
+        input.addEventListener('input', (e) => {
+            const playerNum = e.target.id.slice(-1);
+            const type = e.target.id.substring(0, e.target.id.length - 1);
+            if (['s','o','b','p'].includes(type) && e.target.value !== "" && e.target.value !== "1") e.target.value = "";
+            if (type === 'b' && e.target.value === "1") document.getElementById(`p${playerNum}`).value = "";
+            if (type === 'p' && e.target.value === "1") document.getElementById(`b${playerNum}`).value = "";
+            updateBoxStates();
+        });
+    });
+
+    function calc() {
+        let activeP = [1,2,3,4].filter(i => document.getElementById(`n${i}`).value.trim() !== "");
+        let handValues = activeP.map(i => parseInt(document.getElementById(`h${i}`).value) || 0);
+        let outIndex = activeP.findIndex(i => document.getElementById(`o${i}`).value === "1");
+        let sumOtherHands = handValues.reduce((a, b) => a + b, 0);
+        let allHandsFilled = activeP.every(i => document.getElementById(`h${i}`).value !== "" || document.getElementById(`o${i}`).value === "1");
+        let frozenWinnerIdx = (outIndex === -1 && allHandsFilled && activeP.length > 0) ? handValues.indexOf(Math.min(...handValues)) : -1;
+        activeP.forEach((pNum, idx) => {
+            let v = parseInt(document.getElementById(`v${pNum}`).value) || 0;
+            let d = (parseInt(document.getElementById(`d${pNum}`).value) || 0) * -5;
+            let s = (parseInt(document.getElementById(`s${pNum}`).value) || 0) * 10;
+            let o = (parseInt(document.getElementById(`o${pNum}`).value) || 0) * 25;
+            let b = (parseInt(document.getElementById(`b${pNum}`).value) || 0) * 40;
+            let p = (parseInt(document.getElementById(`p${pNum}`).value) || 0) * 50;
+            let pa = parseInt(document.getElementById(`pa${pNum}`).innerText) || 0;
+            let bonus = (idx === outIndex) ? sumOtherHands : (idx === frozenWinnerIdx ? sumOtherHands - handValues[idx] : 0);
+            let total = v + d + s + o + b + p + pa + bonus;
+            document.getElementById(`rt${pNum}`).innerText = (v||d||s||o||b||p||pa||bonus) ? total : "";
+        });
+    }
+
+    function saveRound() {
+        let activeP = [1,2,3,4].filter(i => document.getElementById(`n${i}`).value.trim() !== "");
+        if (activeP.length === 0) return;
+        let scores = [], inputs = {}, isEndOfSequence = false;
+        for (let i = 1; i <= 4; i++) {
+            let rScore = parseInt(document.getElementById(`rt${i}`).innerText) || 0;
+            scores.push(rScore);
+            ['v','d','s','o','b','p','h'].forEach(pre => inputs[pre + i] = document.getElementById(pre + i).value);
+            inputs['pa' + i] = document.getElementById('pa' + i).innerText;
+            if(inputs['o' + i] === "1") isEndOfSequence = true;
+        }
+        let allHands = activeP.every(i => document.getElementById(`h${i}`).value !== "");
+        if(allHands && activeP.length > 0) isEndOfSequence = true;
+        if (editingIdx > -1) {
+            for(let i=0; i<4; i++) gameTotals[i] = gameTotals[i] - roundHistory[editingIdx].scores[i] + scores[i];
+            roundHistory[editingIdx] = { roundNum: roundHistory[editingIdx].roundNum, scores, inputs };
+            editingIdx = -1;
+            document.getElementById('mainBtn').innerText = "ADD ROUND & CLEAR";
+            document.getElementById('mainBtn').classList.remove('btn-editing');
+        } else {
+            for(let i=0; i<4; i++) gameTotals[i] += scores[i];
+            roundHistory.push({ roundNum: currentRoundInSequence, scores, inputs });
+            if(isEndOfSequence) currentRoundInSequence = 1; else currentRoundInSequence++;
+        }
+        for(let i=1; i<=4; i++) {
+            document.getElementById(`gt${i}`).innerText = gameTotals[i-1];
+            updateWinnerClass(i);
+            ['v','d','s','o','b','p','h'].forEach(pre => document.getElementById(pre + i).value = '');
+            document.getElementById('pa' + i).innerText = '';
+            document.getElementById(`rt${i}`).innerText = '';
+        }
+        rebuildHistoryTable(); updateBoxStates(); saveToStorage();
+        document.querySelector('.scroll-content').scrollTop = 0;
+    }
+
+    function editRound(index) {
+        if (editingIdx > -1) return;
+        editingIdx = index;
+        let roundData = roundHistory[index];
+        for (let i = 1; i <= 4; i++) {
+            ['v','d','s','o','b','p','h'].forEach(pre => document.getElementById(pre + i).value = roundData.inputs[pre + i] || '');
+            document.getElementById('pa' + i).innerText = roundData.inputs['pa' + i] || '';
+        }
+        document.getElementById('mainBtn').innerText = "UPDATE ROUND " + roundData.roundNum;
+        document.getElementById('mainBtn').classList.add('btn-editing');
+        rebuildHistoryTable(); updateBoxStates();
+        document.querySelector('.scroll-content').scrollTop = 0;
+    }
+
+    function rebuildHistoryTable() {
+        let tbody = document.getElementById('histBody');
+        tbody.innerHTML = '';
+        [...roundHistory].reverse().forEach((r, revIdx) => {
+            let actualIdx = roundHistory.length - 1 - revIdx;
+            let row = tbody.insertRow();
+            row.className = 'hist-row' + (editingIdx === actualIdx ? ' editing-row' : '');
+            row.onclick = () => editRound(actualIdx);
+            row.innerHTML = `<td class="label-col">Rd ${r.roundNum}</td><td>${r.scores[0]}</td><td>${r.scores[1]}</td><td>${r.scores[2]}</td><td>${r.scores[3]}</td>`;
+        });
+    }
+
+    function saveToStorage() {
+        const data = { gameTotals, currentRoundInSequence, names: [1,2,3,4].map(i=>document.getElementById(`n${i}`).value), roundHistory };
+        localStorage.setItem('triScoreData', JSON.stringify(data));
+    }
+
+    function resetBoard() {
+        if(confirm('Clear everything?')) { localStorage.clear(); location.reload(); }
+    }
+</script>
+</body>
+</html>
