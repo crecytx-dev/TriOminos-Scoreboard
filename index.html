@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script>
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('service-worker.js');
-}
+<link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator)
+    navigator.serviceWorker.register('./service-worker.js');
 </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
@@ -138,6 +138,81 @@ if ('serviceWorker' in navigator) {
         .scroll-padding {
             height: 150px;
         }
+
+        /* Round Complete Popup */
+        .popup-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.45);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .popup-overlay.visible {
+            display: flex;
+        }
+        .popup-box {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px 20px 16px;
+            width: 88%;
+            max-width: 360px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+            text-align: center;
+        }
+        .popup-title {
+            font-size: 1.1em;
+            font-weight: bold;
+            color: #004d40;
+            margin-bottom: 8px;
+        }
+        .popup-scores {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin: 12px 0 18px;
+            flex-wrap: wrap;
+        }
+        .popup-score-card {
+            background: #e0f2f1;
+            border-radius: 8px;
+            padding: 8px 14px;
+            min-width: 60px;
+        }
+        .popup-score-name {
+            font-size: 0.72em;
+            color: #00796b;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .popup-score-val {
+            font-size: 1.4em;
+            font-weight: bold;
+            color: #004d40;
+        }
+        .popup-btns {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        .popup-btn {
+            flex: 1;
+            padding: 10px 0;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 0.95em;
+            cursor: pointer;
+        }
+        .popup-btn-confirm {
+            background: #00796b;
+            color: white;
+        }
+        .popup-btn-cancel {
+            background: #e0f2f1;
+            color: #004d40;
+        }
     </style>
 </head>
 <body>
@@ -214,11 +289,24 @@ if ('serviceWorker' in navigator) {
     </div>
 </div>
 
+<!-- Round Complete Popup -->
+<div class="popup-overlay" id="roundPopup">
+    <div class="popup-box">
+        <div class="popup-title" id="popupTitle">Round Complete!</div>
+        <div class="popup-scores" id="popupScores"></div>
+        <div class="popup-btns">
+            <button class="popup-btn popup-btn-cancel" onclick="closePopup()">Keep Editing</button>
+            <button class="popup-btn popup-btn-confirm" onclick="confirmAddRound()">Add Round ✓</button>
+        </div>
+    </div>
+</div>
+
 <script>
     let gameTotals = [0, 0, 0, 0];
     let currentRoundInSequence = 1; 
     let roundHistory = [];
     let editingIdx = -1;
+    let popupShown = false; // prevent repeat-showing for same filled state
 
     window.onload = () => {
         const saved = localStorage.getItem('triScoreData');
@@ -322,6 +410,37 @@ if ('serviceWorker' in navigator) {
         });
     });
 
+    function isRoundFilled() {
+        let activeP = [1,2,3,4].filter(i => document.getElementById(`n${i}`).value.trim() !== "");
+        if (activeP.length === 0) return false;
+        // Round is filled if every active player has a round total shown
+        return activeP.every(i => document.getElementById(`rt${i}`).innerText !== "");
+    }
+
+    function showRoundPopup() {
+        let activeP = [1,2,3,4].filter(i => document.getElementById(`n${i}`).value.trim() !== "");
+        let scoresHtml = activeP.map(i => {
+            let name = document.getElementById(`n${i}`).value.trim();
+            let score = document.getElementById(`rt${i}`).innerText;
+            return `<div class="popup-score-card"><div class="popup-score-name">${name}</div><div class="popup-score-val">${score}</div></div>`;
+        }).join('');
+        document.getElementById('popupTitle').innerText = editingIdx > -1
+            ? `Update Round ${roundHistory[editingIdx].roundNum}?`
+            : `Add Round ${currentRoundInSequence}?`;
+        document.getElementById('popupScores').innerHTML = scoresHtml;
+        document.getElementById('roundPopup').classList.add('visible');
+        popupShown = true;
+    }
+
+    function closePopup() {
+        document.getElementById('roundPopup').classList.remove('visible');
+    }
+
+    function confirmAddRound() {
+        closePopup();
+        saveRound();
+    }
+
     function calc() {
         let activeP = [1,2,3,4].filter(i => document.getElementById(`n${i}`).value.trim() !== "");
         let handValues = activeP.map(i => parseInt(document.getElementById(`h${i}`).value) || 0);
@@ -341,6 +460,21 @@ if ('serviceWorker' in navigator) {
             let total = v + d + s + o + b + p + pa + bonus;
             document.getElementById(`rt${pNum}`).innerText = (v||d||s||o||b||p||pa||bonus) ? total : "";
         });
+
+        // Show popup when round is fully filled (all active players have a score)
+        if (isRoundFilled()) {
+            if (!popupShown) {
+                popupShown = true;
+                clearTimeout(window._popupTimer);
+                window._popupTimer = setTimeout(() => {
+                    if (isRoundFilled()) showRoundPopup();
+                }, 3000);
+            }
+        } else {
+            popupShown = false;
+            clearTimeout(window._popupTimer);
+            closePopup();
+        }
     }
 
     function saveRound() {
@@ -375,6 +509,8 @@ if ('serviceWorker' in navigator) {
             document.getElementById(`rt${i}`).innerText = '';
         }
         rebuildHistoryTable(); updateBoxStates(); saveToStorage();
+        popupShown = false;
+        clearTimeout(window._popupTimer);
         document.querySelector('.scroll-content').scrollTop = 0;
     }
 
@@ -389,6 +525,8 @@ if ('serviceWorker' in navigator) {
         document.getElementById('mainBtn').innerText = "UPDATE ROUND " + roundData.roundNum;
         document.getElementById('mainBtn').classList.add('btn-editing');
         rebuildHistoryTable(); updateBoxStates();
+        popupShown = false;
+        clearTimeout(window._popupTimer);
         document.querySelector('.scroll-content').scrollTop = 0;
     }
 
